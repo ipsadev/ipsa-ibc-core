@@ -6,6 +6,8 @@ rust-version = "1.81.0"
 license = "Apache-2.0"
 description = "IBC commitment paths, the fixed-depth SMT and its ICS-23 proofs"
 repository = "https://github.com/ipsadev/ipsa-core"
+documentation = "https://docs.rs/ipsa-core"
+readme = "README.md"
 keywords = ["ibc", "stellar", "cosmos", "merkle", "ics23"]
 categories = ["cryptography::cryptocurrencies"]
 
