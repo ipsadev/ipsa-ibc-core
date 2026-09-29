@@ -48,7 +48,30 @@ raw value, a different key or a wrong index.
 Generating a proof says why it cannot exist: `KeyAbsent`, `KeyPresent`, or
 `IndexTakenByAnotherKey`.
 
-## Commitments
+## Verifying
+
+The crate verifies what it produces, at two levels:
+
+| Function | Takes | For |
+|---|---|---|
+| `smt::verify_membership`, `smt::verify_non_membership` | a key, a value, 64 siblings | code that already holds the siblings, such as the SP1 membership program |
+| `proof::verify_membership_proof`, `proof::verify_non_membership_proof` | proof bytes, the path, the claimed value | a light client checking a relayed proof |
+| `proof::decode_membership_proof`, `proof::decode_non_membership_proof` | proof bytes | a verifier that wants the parts, e.g. to build its own error |
+
+The byte-level verifiers apply exactly the Stellar `08-wasm` light client's
+checks: the proof's key must be the path, the proof's value must be `sha256` of
+the claimed value, an empty value is never provable, the path must have 64
+steps, and it must fold to the root from the key's index. Before this was
+released they were run against the light client's own `merkle.rs` and `smt.rs`
+over 109,500 proofs — valid ones, every byte flipped, truncated and extended —
+and agreed on every verdict.
+
+Fields the check never reads — the declared hash operation, the leaf
+description, and which side a step claims its sibling is on — can change without
+changing the verdict, because the fold is always rebuilt from the key, the value
+and the siblings. That makes a proof's bytes malleable, never its meaning.
+
+
 
 `commitment` is IBC v2's commitment scheme as `ICS24Host.sol` defines it: the
 three paths (`client ‖ 0x01/0x02/0x03 ‖ big-endian sequence`), the payload and

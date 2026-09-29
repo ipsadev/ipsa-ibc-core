@@ -12,20 +12,30 @@ use crate::smt::{
     NonMembershipProof, HASH_SIZE,
 };
 
+/// the protobuf message a proof is sent in.
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct MerkleProof {
+    /// the proofs it carries; only the first is read.
     #[prost(message, repeated, tag = "1")]
     pub proofs: Vec<CommitmentProof>,
 }
 
+/// why proof bytes could not be read.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum DecodeError {
+    /// the bytes are not a valid protobuf message.
     Wire(String),
+    /// the message holds no proof.
     NoProof,
+    /// a membership proof was expected.
     NotAnExistenceProof,
+    /// a non-membership proof was expected.
     NotANonExistenceProof,
+    /// the non-membership proof is missing the path it is checked with.
     MissingExistenceProof,
+    /// a non-membership proof must carry an empty value.
     NonEmptyAbsentValue,
+    /// a step of the path does not hold exactly one sibling.
     MalformedStep,
 }
 
@@ -51,11 +61,16 @@ impl fmt::Display for DecodeError {
 
 impl std::error::Error for DecodeError {}
 
+/// why a proof was refused.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum VerificationError {
+    /// the proof bytes could not be read.
     Decode(DecodeError),
+    /// the proof is for another key.
     KeyMismatch,
+    /// the proof is for another value.
     ValueMismatch,
+    /// the proof does not lead to the root.
     RootMismatch,
 }
 
@@ -78,19 +93,27 @@ impl From<DecodeError> for VerificationError {
     }
 }
 
+/// the parts of a membership proof read from its bytes.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct DecodedMembershipProof {
+    /// the key the proof is for.
     pub key: Vec<u8>,
+    /// the value the proof commits to: `sha256` of the stored value.
     pub value: Vec<u8>,
+    /// the sibling hash at each level, from the leaf up to the root.
     pub siblings: Vec<[u8; HASH_SIZE]>,
 }
 
+/// the parts of a non-membership proof read from its bytes.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct DecodedNonMembershipProof {
+    /// the key the proof is for.
     pub key: Vec<u8>,
+    /// the sibling hash at each level, from the empty slot up to the root.
     pub siblings: Vec<[u8; HASH_SIZE]>,
 }
 
+/// read a membership proof from its bytes.
 pub fn decode_membership_proof(bytes: &[u8]) -> Result<DecodedMembershipProof, DecodeError> {
     let Proof::Exist(existence) = first_proof(bytes)? else {
         return Err(DecodeError::NotAnExistenceProof);
@@ -103,6 +126,7 @@ pub fn decode_membership_proof(bytes: &[u8]) -> Result<DecodedMembershipProof, D
     })
 }
 
+/// read a non-membership proof from its bytes.
 pub fn decode_non_membership_proof(bytes: &[u8]) -> Result<DecodedNonMembershipProof, DecodeError> {
     let Proof::Nonexist(absence) = first_proof(bytes)? else {
         return Err(DecodeError::NotANonExistenceProof);
@@ -119,6 +143,9 @@ pub fn decode_non_membership_proof(bytes: &[u8]) -> Result<DecodedNonMembershipP
     })
 }
 
+/// check proof bytes show `key` holding `value` under `root`.
+///
+/// these are the stellar light client's own checks.
 pub fn verify_membership_proof(
     root: &[u8; HASH_SIZE],
     bytes: &[u8],
@@ -143,6 +170,7 @@ pub fn verify_membership_proof(
     Ok(())
 }
 
+/// check proof bytes show `key` is absent under `root`.
 pub fn verify_non_membership_proof(
     root: &[u8; HASH_SIZE],
     bytes: &[u8],
@@ -197,6 +225,7 @@ fn sibling(step: &InnerOp) -> Result<[u8; HASH_SIZE], DecodeError> {
     Ok(sibling)
 }
 
+/// write a membership proof as bytes for the stellar light client.
 pub fn serialize_membership_proof(proof: &MembershipProof) -> Vec<u8> {
     let existence = existence_proof(
         &proof.key,
@@ -208,6 +237,7 @@ pub fn serialize_membership_proof(proof: &MembershipProof) -> Vec<u8> {
     encode(Proof::Exist(existence))
 }
 
+/// write a non-membership proof as bytes for the stellar light client.
 pub fn serialize_non_membership_proof(proof: &NonMembershipProof) -> Vec<u8> {
     let existence = existence_proof(
         &proof.key,
