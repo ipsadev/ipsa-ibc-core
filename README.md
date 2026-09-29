@@ -1,4 +1,4 @@
-# ipsa-core
+# ipsa-ibc-core
 
 The IBC pieces that both sides of a bridge have to agree on.
 
@@ -21,7 +21,7 @@ light client and the gateway all have to produce the same bytes, and a crate
 that small is one each of them can afford to depend on.
 
 ```toml
-ipsa-core = "0.1"
+ipsa-ibc-core = "0.1"
 ```
 
 Only the primitives live here. Talking to Stellar and Cosmos — Soroban values,

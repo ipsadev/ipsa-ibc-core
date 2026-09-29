@@ -46,6 +46,8 @@ jobs:
           DRY_RUN: ${{ github.event.inputs.dry_run }}
         run: |
           version="$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)"
+          crate="$(sed -n 's/^name = "\(.*\)"/\1/p' Cargo.toml | head -1)"
+          echo "CRATE=$crate" >> "$GITHUB_ENV"
           if [ -z "$TAG" ]; then
             if [ "$DRY_RUN" != "true" ]; then
               echo "::error::a release needs a tag; to rehearse without one, run with dry_run"
@@ -65,7 +67,7 @@ jobs:
         run: |
           body="$(curl -sS --max-time 30 \
             -H 'User-Agent: ipsadev-release (github actions)' \
-            "https://crates.io/api/v1/crates/ipsa-core/$VERSION")"
+            "https://crates.io/api/v1/crates/$CRATE/$VERSION")"
 
           if ! printf '%s' "$body" | grep -q '"version"'; then
             echo "$VERSION is not published yet"
@@ -75,19 +77,19 @@ jobs:
           curl -sSfL --max-time 60 \
             -H 'User-Agent: ipsadev-release (github actions)' \
             -o /tmp/published.crate \
-            "https://static.crates.io/crates/ipsa-core/ipsa-core-$VERSION.crate"
+            "https://static.crates.io/crates/$CRATE/$CRATE-$VERSION.crate"
 
-          published="$(tar -xzOf /tmp/published.crate "ipsa-core-$VERSION/.cargo_vcs_info.json" \
+          published="$(tar -xzOf /tmp/published.crate "$CRATE-$VERSION/.cargo_vcs_info.json" \
             | sed -n 's/.*"sha1": *"\([0-9a-f]*\)".*/\1/p')"
           commit="$(git rev-parse HEAD)"
 
           if [ "$published" != "$commit" ]; then
-            echo "::error::ipsa-core $VERSION is already published from ${published:-an unknown commit}, not $commit; crates.io versions cannot be replaced"
+            echo "::error::$CRATE $VERSION is already published from ${published:-an unknown commit}, not $commit; crates.io versions cannot be replaced"
             exit 1
           fi
 
           echo "PUBLISHED=true" >> "$GITHUB_ENV"
-          echo "::notice::ipsa-core $VERSION is already published from this commit; announcing it without publishing again"
+          echo "::notice::$CRATE $VERSION is already published from this commit; announcing it without publishing again"
 
       - name: setup rust
         uses: dtolnay/rust-toolchain@1.91.1
@@ -135,10 +137,10 @@ jobs:
           {
             printf 'IBC commitment paths, the SMT and its ICS-23 proofs, %s.\n\n' "$TAG"
             printf '```toml\n'
-            printf 'ipsa-core = "%s"\n' "$VERSION"
+            printf '%s = "%s"\n' "$CRATE" "$VERSION"
             printf '```\n\n'
-            printf -- '- [crates.io](https://crates.io/crates/ipsa-core/%s)\n' "$VERSION"
-            printf -- '- [docs.rs](https://docs.rs/ipsa-core/%s)\n\n' "$VERSION"
+            printf -- '- [crates.io](https://crates.io/crates/%s/%s)\n' "$CRATE" "$VERSION"
+            printf -- '- [docs.rs](https://docs.rs/%s/%s)\n\n' "$CRATE" "$VERSION"
             printf 'Published from %s after `just ci`: fmt, clippy, the test suite and `cargo audit`.\n' "$TAG"
           } > /tmp/notes.md
 
