@@ -1,4 +1,6 @@
-use ipsa_core::smt::{key_index, ProofError, Smt, EMPTY, TREE_DEPTH};
+use ipsa_core::smt::{
+    key_index, verify_membership, verify_non_membership, ProofError, Smt, EMPTY, TREE_DEPTH,
+};
 
 fn tree(entries: &[(&[u8], &[u8])]) -> Smt {
     let mut tree = Smt::new();
@@ -25,7 +27,10 @@ fn an_empty_value_is_stored_as_the_router_stores_it() {
 
     let proof = tree.generate_membership_proof(b"key").unwrap();
 
-    assert!(Smt::verify_membership(&tree.root(), &proof, b""));
+    assert!(
+        !verify_membership(&tree.root(), &proof.key, b"", &proof.siblings),
+        "an empty value is refused by the verifier, as the light client refuses it"
+    );
 }
 
 #[test]
@@ -60,7 +65,12 @@ fn a_membership_proof_carries_its_key_and_verifies() {
 
     assert_eq!(proof.key, b"k2");
     assert_eq!(proof.siblings.len(), TREE_DEPTH);
-    assert!(Smt::verify_membership(&tree.root(), &proof, b"v2"));
+    assert!(verify_membership(
+        &tree.root(),
+        &proof.key,
+        b"v2",
+        &proof.siblings
+    ));
 }
 
 #[test]
@@ -68,8 +78,18 @@ fn a_membership_proof_rejects_another_value_or_root() {
     let tree = tree(&[(b"key", b"value")]);
     let proof = tree.generate_membership_proof(b"key").unwrap();
 
-    assert!(!Smt::verify_membership(&tree.root(), &proof, b"wrong"));
-    assert!(!Smt::verify_membership(&[0xAA; 32], &proof, b"value"));
+    assert!(!verify_membership(
+        &tree.root(),
+        &proof.key,
+        b"wrong",
+        &proof.siblings
+    ));
+    assert!(!verify_membership(
+        &[0xAA; 32],
+        &proof.key,
+        b"value",
+        &proof.siblings
+    ));
 }
 
 #[test]
@@ -79,7 +99,12 @@ fn a_membership_proof_rejects_a_substituted_key() {
 
     proof.key = b"other".to_vec();
 
-    assert!(!Smt::verify_membership(&tree.root(), &proof, b"value"));
+    assert!(!verify_membership(
+        &tree.root(),
+        &proof.key,
+        b"value",
+        &proof.siblings
+    ));
 }
 
 #[test]
@@ -89,7 +114,12 @@ fn a_membership_proof_rejects_a_short_path() {
 
     proof.siblings.pop();
 
-    assert!(!Smt::verify_membership(&tree.root(), &proof, b"value"));
+    assert!(!verify_membership(
+        &tree.root(),
+        &proof.key,
+        b"value",
+        &proof.siblings
+    ));
 }
 
 #[test]
@@ -106,7 +136,11 @@ fn a_non_membership_proof_verifies_for_an_absent_key() {
     let proof = tree.generate_non_membership_proof(b"absent").unwrap();
 
     assert_eq!(proof.key, b"absent");
-    assert!(Smt::verify_non_membership(&tree.root(), &proof));
+    assert!(verify_non_membership(
+        &tree.root(),
+        &proof.key,
+        &proof.siblings
+    ));
 }
 
 #[test]
@@ -126,7 +160,11 @@ fn a_non_membership_proof_cannot_be_reused_for_a_present_key() {
 
     proof.key = b"key".to_vec();
 
-    assert!(!Smt::verify_non_membership(&tree.root(), &proof));
+    assert!(!verify_non_membership(
+        &tree.root(),
+        &proof.key,
+        &proof.siblings
+    ));
 }
 
 #[test]
@@ -134,7 +172,7 @@ fn an_empty_tree_proves_any_key_absent() {
     let tree = Smt::new();
     let proof = tree.generate_non_membership_proof(b"anything").unwrap();
 
-    assert!(Smt::verify_non_membership(&EMPTY, &proof));
+    assert!(verify_non_membership(&EMPTY, &proof.key, &proof.siblings));
 }
 
 #[test]
@@ -144,11 +182,21 @@ fn a_stale_proof_fails_after_the_value_changes() {
 
     tree.insert(b"key", b"v2");
 
-    assert!(!Smt::verify_membership(&tree.root(), &stale, b"v1"));
+    assert!(!verify_membership(
+        &tree.root(),
+        &stale.key,
+        b"v1",
+        &stale.siblings
+    ));
 
     let fresh = tree.generate_membership_proof(b"key").unwrap();
 
-    assert!(Smt::verify_membership(&tree.root(), &fresh, b"v2"));
+    assert!(verify_membership(
+        &tree.root(),
+        &fresh.key,
+        b"v2",
+        &fresh.siblings
+    ));
 }
 
 #[test]

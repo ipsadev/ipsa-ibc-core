@@ -119,41 +119,6 @@ impl Smt {
         }
     }
 
-    pub fn verify_membership(
-        root: &[u8; HASH_SIZE],
-        proof: &MembershipProof,
-        value: &[u8],
-    ) -> bool {
-        let key_hash = sha256(&proof.key);
-        let value_hash = sha256(value);
-
-        if key_hash != proof.key_hash || value_hash != proof.value_hash {
-            return false;
-        }
-
-        if proof.siblings.len() != TREE_DEPTH {
-            return false;
-        }
-
-        let computed = fold_siblings(
-            key_index_from_hash(&key_hash),
-            leaf_hash(key_hash, value_hash),
-            &proof.siblings,
-        );
-
-        computed == *root
-    }
-
-    pub fn verify_non_membership(root: &[u8; HASH_SIZE], proof: &NonMembershipProof) -> bool {
-        let key_hash = sha256(&proof.key);
-
-        if key_hash != proof.key_hash || proof.siblings.len() != TREE_DEPTH {
-            return false;
-        }
-
-        fold_siblings(key_index_from_hash(&key_hash), EMPTY, &proof.siblings) == *root
-    }
-
     fn materialize_levels(&self) -> Vec<BTreeMap<u64, [u8; HASH_SIZE]>> {
         let mut levels: Vec<BTreeMap<u64, [u8; HASH_SIZE]>> =
             (0..=TREE_DEPTH).map(|_| BTreeMap::new()).collect();
@@ -194,6 +159,33 @@ impl Smt {
 
         siblings
     }
+}
+
+pub fn verify_membership(
+    root: &[u8; HASH_SIZE],
+    key: &[u8],
+    value: &[u8],
+    siblings: &[[u8; HASH_SIZE]],
+) -> bool {
+    if value.is_empty() || siblings.len() != TREE_DEPTH {
+        return false;
+    }
+
+    let leaf = leaf_hash(sha256(key), sha256(value));
+
+    fold_siblings(key_index(key), leaf, siblings) == *root
+}
+
+pub fn verify_non_membership(
+    root: &[u8; HASH_SIZE],
+    key: &[u8],
+    siblings: &[[u8; HASH_SIZE]],
+) -> bool {
+    if siblings.len() != TREE_DEPTH {
+        return false;
+    }
+
+    fold_siblings(key_index(key), EMPTY, siblings) == *root
 }
 
 pub fn key_index(key: &[u8]) -> u64 {

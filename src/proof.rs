@@ -1,15 +1,200 @@
+use std::fmt;
+
 use ics23::{
     commitment_proof::Proof, CommitmentProof, ExistenceProof, HashOp, InnerOp, LeafOp,
     NonExistenceProof,
 };
 use prost::Message;
+use sha2::{Digest, Sha256};
 
-use crate::smt::{key_index_from_hash, MembershipProof, NonMembershipProof, HASH_SIZE};
+use crate::smt::{
+    key_index_from_hash, verify_membership, verify_non_membership, MembershipProof,
+    NonMembershipProof, HASH_SIZE,
+};
 
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct MerkleProof {
     #[prost(message, repeated, tag = "1")]
     pub proofs: Vec<CommitmentProof>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum DecodeError {
+    Wire(String),
+    NoProof,
+    NotAnExistenceProof,
+    NotANonExistenceProof,
+    MissingExistenceProof,
+    NonEmptyAbsentValue,
+    MalformedStep,
+}
+
+impl fmt::Display for DecodeError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Wire(reason) => write!(formatter, "MerkleProof: {reason}"),
+            Self::NoProof => formatter.write_str("the MerkleProof holds no proof"),
+            Self::NotAnExistenceProof => formatter.write_str("expected an existence proof"),
+            Self::NotANonExistenceProof => formatter.write_str("expected a non-existence proof"),
+            Self::MissingExistenceProof => {
+                formatter.write_str("the non-existence proof has no existence proof on its left")
+            }
+            Self::NonEmptyAbsentValue => {
+                formatter.write_str("an absence proof must carry an empty value")
+            }
+            Self::MalformedStep => {
+                formatter.write_str("a path step is neither a left nor a right sibling")
+            }
+        }
+    }
+}
+
+impl std::error::Error for DecodeError {}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum VerificationError {
+    Decode(DecodeError),
+    KeyMismatch,
+    ValueMismatch,
+    RootMismatch,
+}
+
+impl fmt::Display for VerificationError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Decode(error) => error.fmt(formatter),
+            Self::KeyMismatch => formatter.write_str("the proof is for another key"),
+            Self::ValueMismatch => formatter.write_str("the proof commits to another value"),
+            Self::RootMismatch => formatter.write_str("the proof does not fold to the root"),
+        }
+    }
+}
+
+impl std::error::Error for VerificationError {}
+
+impl From<DecodeError> for VerificationError {
+    fn from(error: DecodeError) -> Self {
+        Self::Decode(error)
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct DecodedMembershipProof {
+    pub key: Vec<u8>,
+    pub value: Vec<u8>,
+    pub siblings: Vec<[u8; HASH_SIZE]>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct DecodedNonMembershipProof {
+    pub key: Vec<u8>,
+    pub siblings: Vec<[u8; HASH_SIZE]>,
+}
+
+pub fn decode_membership_proof(bytes: &[u8]) -> Result<DecodedMembershipProof, DecodeError> {
+    let Proof::Exist(existence) = first_proof(bytes)? else {
+        return Err(DecodeError::NotAnExistenceProof);
+    };
+
+    Ok(DecodedMembershipProof {
+        siblings: siblings(&existence.path)?,
+        key: existence.key,
+        value: existence.value,
+    })
+}
+
+pub fn decode_non_membership_proof(bytes: &[u8]) -> Result<DecodedNonMembershipProof, DecodeError> {
+    let Proof::Nonexist(absence) = first_proof(bytes)? else {
+        return Err(DecodeError::NotANonExistenceProof);
+    };
+    let existence = absence.left.ok_or(DecodeError::MissingExistenceProof)?;
+
+    if !existence.value.is_empty() {
+        return Err(DecodeError::NonEmptyAbsentValue);
+    }
+
+    Ok(DecodedNonMembershipProof {
+        key: absence.key,
+        siblings: siblings(&existence.path)?,
+    })
+}
+
+pub fn verify_membership_proof(
+    root: &[u8; HASH_SIZE],
+    bytes: &[u8],
+    key: &[u8],
+    value: &[u8],
+) -> Result<(), VerificationError> {
+    let proof = decode_membership_proof(bytes)?;
+    let value_hash: [u8; HASH_SIZE] = Sha256::digest(value).into();
+
+    if proof.key != key {
+        return Err(VerificationError::KeyMismatch);
+    }
+
+    if proof.value != value_hash {
+        return Err(VerificationError::ValueMismatch);
+    }
+
+    if !verify_membership(root, key, value, &proof.siblings) {
+        return Err(VerificationError::RootMismatch);
+    }
+
+    Ok(())
+}
+
+pub fn verify_non_membership_proof(
+    root: &[u8; HASH_SIZE],
+    bytes: &[u8],
+    key: &[u8],
+) -> Result<(), VerificationError> {
+    let proof = decode_non_membership_proof(bytes)?;
+
+    if proof.key != key {
+        return Err(VerificationError::KeyMismatch);
+    }
+
+    if !verify_non_membership(root, key, &proof.siblings) {
+        return Err(VerificationError::RootMismatch);
+    }
+
+    Ok(())
+}
+
+fn first_proof(bytes: &[u8]) -> Result<Proof, DecodeError> {
+    let merkle =
+        MerkleProof::decode(bytes).map_err(|error| DecodeError::Wire(error.to_string()))?;
+
+    merkle
+        .proofs
+        .into_iter()
+        .next()
+        .and_then(|commitment| commitment.proof)
+        .ok_or(DecodeError::NoProof)
+}
+
+fn siblings(path: &[InnerOp]) -> Result<Vec<[u8; HASH_SIZE]>, DecodeError> {
+    path.iter().map(sibling).collect()
+}
+
+fn sibling(step: &InnerOp) -> Result<[u8; HASH_SIZE], DecodeError> {
+    let right_sibling = step.prefix == [0x01] && step.suffix.len() == HASH_SIZE;
+    let left_sibling =
+        step.suffix.is_empty() && step.prefix.len() == 1 + HASH_SIZE && step.prefix[0] == 0x01;
+
+    let bytes = if right_sibling {
+        &step.suffix[..]
+    } else if left_sibling {
+        &step.prefix[1..]
+    } else {
+        return Err(DecodeError::MalformedStep);
+    };
+
+    let mut sibling = [0u8; HASH_SIZE];
+
+    sibling.copy_from_slice(bytes);
+
+    Ok(sibling)
 }
 
 pub fn serialize_membership_proof(proof: &MembershipProof) -> Vec<u8> {
