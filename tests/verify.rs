@@ -1,5 +1,5 @@
 use ics23::{commitment_proof::Proof, CommitmentProof, ExistenceProof, InnerOp, NonExistenceProof};
-use ipsa_core::{
+use ipsa_ibc_core::{
     proof::{
         decode_membership_proof, decode_non_membership_proof, serialize_membership_proof,
         serialize_non_membership_proof, verify_membership_proof, verify_non_membership_proof,

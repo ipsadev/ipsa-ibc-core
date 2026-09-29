@@ -1,4 +1,4 @@
-use ipsa_core::smt::{Smt, EMPTY, HASH_SIZE, TREE_DEPTH};
+use ipsa_ibc_core::smt::{Smt, EMPTY, HASH_SIZE, TREE_DEPTH};
 
 fn hex32(s: &str) -> [u8; HASH_SIZE] {
     assert_eq!(s.len(), 64, "expected 64 hex chars, got {}", s.len());

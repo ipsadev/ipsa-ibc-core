@@ -1,4 +1,4 @@
-use ipsa_core::commitment::{
+use ipsa_ibc_core::commitment::{
     acknowledgement_commitment, acknowledgement_commitment_path, packet_commitment,
     packet_commitment_path, packet_receipt_path, payload_commitment, CommitmentError,
     ACKNOWLEDGEMENT_COMMITMENT_DISCRIMINATOR, PACKET_COMMITMENT_DISCRIMINATOR,

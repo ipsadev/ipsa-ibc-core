@@ -1,5 +1,5 @@
 use ics23::commitment_proof::Proof;
-use ipsa_core::{
+use ipsa_ibc_core::{
     proof::{serialize_membership_proof, serialize_non_membership_proof, MerkleProof},
     smt::{key_index, Smt, TREE_DEPTH},
 };

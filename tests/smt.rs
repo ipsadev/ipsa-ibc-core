@@ -1,4 +1,4 @@
-use ipsa_core::smt::{
+use ipsa_ibc_core::smt::{
     key_index, verify_membership, verify_non_membership, ProofError, Smt, EMPTY, TREE_DEPTH,
 };
 

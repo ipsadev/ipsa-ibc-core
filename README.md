@@ -31,7 +31,7 @@ tree — belongs to the services that do it, in `ipsa-backend`.
 ## Using it
 
 ```rust
-use ipsa_core::{proof::serialize_membership_proof, smt::Smt};
+use ipsa_ibc_core::{proof::serialize_membership_proof, smt::Smt};
 
 let mut tree = Smt::new();
 tree.insert(b"path", b"commitment");
