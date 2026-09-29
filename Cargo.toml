@@ -1,6 +1,6 @@
 [package]
 name = "ipsa-ibc-core"
-version = "0.1.1"
+version = "0.1.2"
 edition = "2021"
 rust-version = "1.81.0"
 license = "Apache-2.0"
@@ -12,7 +12,7 @@ keywords = ["ibc", "stellar", "cosmos", "merkle", "ics23"]
 categories = ["cryptography::cryptocurrencies"]
 
 [dependencies]
-ics23 = "0.12"
+ics23 = { version = "0.12", default-features = false }
 prost = "0.13"
 sha2 = "0.10"
 
