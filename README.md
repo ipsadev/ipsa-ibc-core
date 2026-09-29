@@ -15,19 +15,75 @@ wrong on one side and proofs stop verifying.
 | `smt` | what is the root of this state, and what proves one entry |
 | `proof` | how is that proof written so another chain can read it |
 
-Those three need nothing but hashing and protobuf. Everything else is behind the
-`chains` feature: the Soroban and Cosmos types, the RPC client, the codecs.
+They need nothing but hashing and protobuf: `sha2`, `ics23` and `prost`, 41
+packages in the lockfile. That is the point. The Soroban router, the `08-wasm`
+light client and the gateway all have to produce the same bytes, and a crate
+that small is one each of them can afford to depend on.
 
 ```toml
-# just the primitives, 65 dependencies
-ipsa-core = { version = "0.1", default-features = false }
-
-# with the Stellar and Cosmos plumbing, 430
 ipsa-core = "0.1"
 ```
 
-The split is enforced in CI, because the primitives are what a light client has
-to match and they should stay cheap to depend on.
+Only the primitives live here. Talking to Stellar and Cosmos — Soroban values,
+IBC messages, client states, the api client, the gateway's view of the router's
+tree — belongs to the services that do it, in `ipsa-backend`.
+
+## Using it
+
+```rust
+use ipsa_core::{proof::serialize_membership_proof, smt::Smt};
+
+let mut tree = Smt::new();
+tree.insert(b"path", b"commitment");
+
+let proof = tree.generate_membership_proof(b"path")?;
+let bytes = serialize_membership_proof(&proof);
+```
+
+A proof carries the key it was generated for, and the serialisers take nothing
+else: they write the value's **hash**, which is what the light client compares,
+and derive each step's side from the key's index. There is no way to hand them a
+raw value, a different key or a wrong index.
+
+Generating a proof says why it cannot exist: `KeyAbsent`, `KeyPresent`, or
+`IndexTakenByAnotherKey`.
+
+## Commitments
+
+`commitment` is IBC v2's commitment scheme as `ICS24Host.sol` defines it: the
+three paths (`client ‖ 0x01/0x02/0x03 ‖ big-endian sequence`), the payload and
+packet commitments, the acknowledgement commitment, and the universal error
+acknowledgement. `tests/commitment.rs` checks each against vectors produced by
+`ICS24Host.sol` itself, in `tests/fixtures/ics24-host-vectors.txt`. To regenerate
+them, put `tests/fixtures/ICS24HostVectors.t.sol` in a Foundry project whose
+remappings point `ibc/` at `ibc-solidity/contracts/` and run `forge test -vv`.
+
+An acknowledgement commitment needs at least one acknowledgement, as on
+Solidity; an empty list is `CommitmentError::NoAcknowledgements`.
+
+A receipt's value is the one byte `RECEIPT_SENTINEL` on Stellar, where
+`ICS24Host.sol` stores `keccak256(abi.encode(packet))`. Both are valid: a
+receipt is only ever proven absent, so its value is never compared.
+
+
+
+A leaf's position is the first 8 bytes of `sha256(key)`, as on the router, so two
+keys can in principle share one. The tree then holds whichever was written last,
+and for the other key neither proof exists — `generate_*_proof` returns
+`IndexTakenByAnotherKey` instead of a proof. Finding such a pair takes around
+2⁶⁴ hashes for a chosen key, so it is not tested; it is recorded here because
+it is the one case where membership and non-membership are both unavailable.
+
+An empty value is stored like any other, as the router stores it; removal is
+`remove`.
+
+
+
+The proofs are carried in ICS-23 message types, but they are not generic ICS-23
+proofs: the leaf is `sha256(0x00 ‖ sha256(key) ‖ sha256(value))`, and a
+non-membership proof is the key's path folded from the empty leaf. The one
+verifier is the Stellar `08-wasm` light client, so the format can only change on
+both sides at once.
 
 ## License
 

@@ -11,58 +11,11 @@ readme = "README.md"
 keywords = ["ibc", "stellar", "cosmos", "merkle", "ics23"]
 categories = ["cryptography::cryptocurrencies"]
 
-[features]
-default = ["chains"]
-# everything that talks to Stellar or Cosmos; off by default for consumers that
-# only need the proof and commitment primitives
-chains = [
-  "dep:soroban-client",
-  "dep:reqwest",
-  "dep:stellar-strkey",
-  "dep:serde_json",
-  "dep:ibc",
-  "dep:tendermint",
-  "dep:ibc-proto",
-  "dep:stellar-xdr",
-  "dep:tracing",
-  "dep:tracing-subscriber",
-]
-
 [dependencies]
-anyhow = "1"
-prost = "0.13"
 ics23 = "0.12"
+prost = "0.13"
 sha2 = "0.10"
-hex = "0.4"
-
-soroban-client = { version = "0.5.8", optional = true }
-reqwest = { version = "0.12", features = ["json"], optional = true }
-stellar-strkey = { version = "0.0.16", optional = true }
-serde_json = { version = "1.0.150", optional = true }
-ibc = { version = "0.57.0", features = ["serde"], optional = true }
-tendermint = { version = "0.40.3", features = ["secp256k1"], optional = true }
-ibc-proto = { version = "0.51", default-features = false, features = [
-  "std",
-], optional = true }
-stellar-xdr = { version = "26.0.1", default-features = true, features = [
-  "base64",
-  "std",
-  "serde",
-  "alloc",
-], optional = true }
-tracing = { version = "0.1", optional = true }
-tracing-subscriber = { version = "0.3", features = [
-  "env-filter",
-], optional = true }
-
-[dev-dependencies]
-tokio = { version = "1.52.3", features = [
-  "time",
-  "rt-multi-thread",
-  "macros",
-  "sync",
-] }
-tendermint-proto = "0.40.3"
 
 [lints.rust]
 unsafe_code = "forbid"
+

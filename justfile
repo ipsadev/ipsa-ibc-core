@@ -6,7 +6,7 @@ default:
     @just --list
 
 # everything CI runs, in CI's order
-ci: fmt-check lint test lean audit
+ci: fmt-check lint test audit
 
 fmt:
     cargo +nightly fmt --all
@@ -20,14 +20,8 @@ lint:
 test:
     cargo test --locked
 
-# the proof primitives must build without a chain toolchain
-lean:
-    cargo build --locked --no-default-features
-
-# both ignores reach us through soroban-client's reqwest 0.11, so they are in
-# the chains feature only; the default-features-off build carries neither
 audit:
-    cargo audit --file Cargo.lock --ignore RUSTSEC-2026-0009 --ignore RUSTSEC-2026-0258
+    cargo audit --file Cargo.lock
 
 # what crates.io would receive, without sending it
 package:

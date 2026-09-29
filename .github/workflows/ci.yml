@@ -19,7 +19,7 @@ env:
 
 jobs:
   rust:
-    name: fmt, lint, test, lean
+    name: fmt, lint, test, audit
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:

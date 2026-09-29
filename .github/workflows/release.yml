@@ -6,8 +6,9 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "tag to release (e.g. v0.1.0)"
-        required: true
+        description: "tag to release (e.g. v0.1.0); leave empty with dry_run to rehearse the branch this runs from"
+        required: false
+        default: ""
         type: string
       dry_run:
         description: "run every gate but do not publish"
@@ -24,7 +25,7 @@ concurrency:
 
 env:
   CARGO_TERM_COLOR: always
-  TAG: ${{ github.event.inputs.tag || github.ref_name }}
+  TAG: ${{ github.event_name == 'push' && github.ref_name || github.event.inputs.tag }}
 
 jobs:
   release:
@@ -37,18 +38,28 @@ jobs:
       - name: checkout
         uses: actions/checkout@v4
         with:
-          ref: ${{ env.TAG }}
+          ref: ${{ env.TAG || github.ref }}
           fetch-depth: 0
 
       - name: the tag must match the crate version
+        env:
+          DRY_RUN: ${{ github.event.inputs.dry_run }}
         run: |
           version="$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)"
-          if [ "$TAG" != "v$version" ]; then
+          if [ -z "$TAG" ]; then
+            if [ "$DRY_RUN" != "true" ]; then
+              echo "::error::a release needs a tag; to rehearse without one, run with dry_run"
+              exit 1
+            fi
+            echo "TAG=v$version" >> "$GITHUB_ENV"
+            echo "::notice::rehearsing v$version from $GITHUB_REF_NAME, no tag needed"
+          elif [ "$TAG" != "v$version" ]; then
             echo "::error::tag $TAG does not match Cargo.toml version $version"
             exit 1
+          else
+            echo "tag $TAG matches crate version $version"
           fi
           echo "VERSION=$version" >> "$GITHUB_ENV"
-          echo "tag $TAG matches crate version $version"
 
       - name: the version must not already be on crates.io
         run: |
@@ -110,13 +121,9 @@ jobs:
             printf '```toml\n'
             printf 'ipsa-core = "%s"\n' "$VERSION"
             printf '```\n\n'
-            printf 'The proof primitives build without a chain toolchain:\n\n'
-            printf '```toml\n'
-            printf 'ipsa-core = { version = "%s", default-features = false }\n' "$VERSION"
-            printf '```\n\n'
             printf '- [crates.io](https://crates.io/crates/ipsa-core/%s)\n' "$VERSION"
             printf '- [docs.rs](https://docs.rs/ipsa-core/%s)\n\n' "$VERSION"
-            printf 'Published from %s after `just ci`: fmt, clippy, the test suite, the `--no-default-features` build, and `cargo audit`.\n' "$TAG"
+            printf 'Published from %s after `just ci`: fmt, clippy, the test suite and `cargo audit`.\n' "$TAG"
           } > /tmp/notes.md
 
           if gh release view "$TAG" >/dev/null 2>&1; then
