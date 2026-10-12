@@ -110,5 +110,5 @@ both sides at once.
 
 ## License
 
-Licensed under the
+Copyright 2026 Amanda Gonsalves. Licensed under the
 [Apache License 2.0](https://github.com/ipsadev/ipsa-core/blob/main/LICENSE).
